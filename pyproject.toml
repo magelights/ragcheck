@@ -23,3 +23,11 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+hallugen = { git = "https://github.com/magelights/hallugen.git" }
+
+[dependency-groups]
+dev = [
+    "hallugen",
+]

@@ -7,7 +7,10 @@ Usage:
 
 import random
 from datasets import load_dataset
+from hallugen import mutate
 from ragcheck import verify
+
+STRATEGIES = ["entity_swap", "numeric_drift", "temporal_shift"]
 
 
 def load_finqabench():
@@ -16,43 +19,6 @@ def load_finqabench():
     ds = load_dataset("lighthouzai/finqabench", split="train")
     print(f"Loaded {len(ds)} examples")
     return ds
-
-
-def inject_hallucination(text: str, entities: list[str]) -> str | None:
-    """
-    Inject a hallucination by replacing an entity with a fake one.
-    Returns None if no entities to replace.
-    """
-    if not entities:
-        return None
-
-    # Pick a random entity to replace
-    original = random.choice(entities)
-
-    # Generate fake replacements based on entity type
-    fake_replacements = {
-        # If it looks like money, replace with different amount
-        "$": "$999.9 billion",
-        # If it looks like a percentage, replace with different percentage
-        "%": "87.3%",
-        # If it looks like a year, replace with different year
-        "20": "2019",
-        "19": "1995",
-        # Default: replace with fake company name
-        "default": "FakeCorp Inc."
-    }
-
-    # Find appropriate replacement
-    replacement = fake_replacements["default"]
-    for prefix, fake in fake_replacements.items():
-        if original.startswith(prefix):
-            replacement = fake
-            break
-
-    # Replace in text
-    if original in text:
-        return text.replace(original, replacement, 1)
-    return None
 
 
 def evaluate(ds, num_samples: int = 50, threshold: float = 0.8):
@@ -88,15 +54,16 @@ def evaluate(ds, num_samples: int = 50, threshold: float = 0.8):
             results["skipped"] += 1
             continue
 
-        # Try to create hallucinated answer
-        hallucinated_answer = inject_hallucination(
-            correct_answer,
-            correct_result.details.get("answer_entities", [])
-        )
+        # Create hallucinated answer using hallugen
+        strategy = random.choice(STRATEGIES)
+        mutation_result = mutate(correct_answer, context=context, strategy=strategy)
 
-        if hallucinated_answer is None:
+        # Skip if no mutation was made
+        if mutation_result.mutated_text == correct_answer:
             results["skipped"] += 1
             continue
+
+        hallucinated_answer = mutation_result.mutated_text
 
         # Verify hallucinated answer
         hallucinated_result = verify(hallucinated_answer, [context])
